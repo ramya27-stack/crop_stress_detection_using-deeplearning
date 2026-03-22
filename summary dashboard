@@ -1,0 +1,149 @@
+
+# ════════════════════════════════════════════════════════════
+# CELL 9 — BATCH INFERENCE + SUMMARY DASHBOARD
+# Title   : Full Test Set Prediction & Results Dashboard
+# Process : Run inference on all test images, save CSV with
+#           predictions + recommendations. Then generate a
+#           6-panel visual summary dashboard.
+# ════════════════════════════════════════════════════════════
+
+print('CELL 9 — Batch inference...')
+test_gen.reset()
+
+all_probs = model.predict(test_gen, verbose=1)
+all_preds = np.argmax(all_probs, axis=1)
+all_true  = test_gen.classes
+all_files = [os.path.basename(f) for f in test_gen.filepaths]
+
+# Align lengths
+min_len   = min(len(all_true), len(all_preds))
+all_true  = all_true[:min_len]
+all_preds = all_preds[:min_len]
+all_probs = all_probs[:min_len]
+all_files = all_files[:min_len]
+
+# Save CSV
+csv_path = f"{CONFIG['results_dir']}/predictions.csv"
+with open(csv_path, 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(['filename', 'true_label', 'predicted_label',
+                     'confidence', 'correct', 'severity', 'primary_treatment'])
+    for fname, true_idx, pred_idx, probs in zip(all_files, all_true, all_preds, all_probs):
+        rec = get_recommendation(idx_to_class[pred_idx])
+        writer.writerow([
+            fname,
+            idx_to_class[true_idx],
+            idx_to_class[pred_idx],
+            f'{probs[pred_idx]:.4f}',
+            str(true_idx == pred_idx),
+            rec['severity'],
+            rec['treatment']['organic'][0],
+        ])
+
+overall_acc = (all_preds == all_true).mean()
+print(f'  CSV saved: {csv_path}')
+print(f'  Correct  : {(all_preds == all_true).sum():,} / {len(all_preds):,}  ({overall_acc*100:.1f}%)')
+
+# ── Dashboard ────────────────────────────────────────────────
+per_class_acc = {}
+for i, cls in enumerate(class_names):
+    mask = all_true == i
+    if mask.sum() > 0:
+        per_class_acc[cls] = (all_preds[mask] == i).mean()
+
+sorted_cls  = sorted(per_class_acc, key=per_class_acc.get)
+sorted_vals = [per_class_acc[c] for c in sorted_cls]
+
+severity_counts = {}
+for pred_idx in all_preds:
+    sev = get_recommendation(idx_to_class[pred_idx])['severity']
+    severity_counts[sev] = severity_counts.get(sev, 0) + 1
+
+fig = plt.figure(figsize=(18, 10), facecolor='#0a0f0a')
+fig.suptitle('Multicrop Stress Detection — Summary Dashboard',
+             color='white', fontsize=16, fontweight='bold', y=0.98)
+gs   = fig.add_gridspec(2, 3, hspace=0.45, wspace=0.35)
+axes = [fig.add_subplot(gs[r, c]) for r in range(2) for c in range(3)]
+bg   = '#111811'
+for ax in axes:
+    ax.set_facecolor(bg)
+    ax.tick_params(colors='white', labelsize=8)
+    for spine in ax.spines.values(): spine.set_edgecolor('#1e2e1e')
+
+# A) Per-class accuracy
+colors_bar = ['#4ade80' if v >= 0.8 else '#fbbf24' if v >= 0.5 else '#f87171' for v in sorted_vals]
+axes[0].barh(range(len(sorted_cls)), sorted_vals, color=colors_bar, edgecolor='none')
+axes[0].set_yticks(range(len(sorted_cls)))
+axes[0].set_yticklabels([c[:20] for c in sorted_cls], fontsize=7)
+axes[0].set_xlim(0, 1)
+axes[0].axvline(0.8, color='white', linestyle='--', alpha=0.4, linewidth=1)
+axes[0].set_title('Per-Class Accuracy', color='white', fontsize=10)
+axes[0].set_xlabel('Accuracy', color='#5a7a5a', fontsize=8)
+
+# B) Severity pie
+sev_labels = list(severity_counts.keys())
+sev_vals   = list(severity_counts.values())
+sev_colors_map = {'None': '#4ade80', 'Medium': '#fbbf24', 'High': '#fb923c',
+                  'Very High': '#f87171', 'Medium-High': '#fbbf24'}
+pie_colors = [sev_colors_map.get(s, '#94a3b8') for s in sev_labels]
+axes[1].pie(sev_vals, labels=sev_labels, colors=pie_colors,
+            autopct='%1.0f%%', textprops={'color': 'white', 'fontsize': 8}, startangle=140)
+axes[1].set_title('Severity Distribution', color='white', fontsize=10)
+
+# C) Training curves
+if h1 is not None and h2 is not None:
+    acc_all     = h1.history['accuracy']     + h2.history['accuracy']
+    val_acc_all = h1.history['val_accuracy'] + h2.history['val_accuracy']
+    split_ep    = len(h1.history['accuracy'])
+    axes[2].plot(acc_all,     color='#4ade80', lw=1.5, label='Train')
+    axes[2].plot(val_acc_all, color='#60a5fa', lw=1.5, label='Val', ls='--')
+    axes[2].axvline(split_ep, color='#fbbf24', ls=':', alpha=0.6, label='Fine-tune')
+    axes[2].legend(facecolor=bg, labelcolor='white', fontsize=7)
+axes[2].set_title('Training Accuracy', color='white', fontsize=10)
+axes[2].set_xlabel('Epoch', color='#5a7a5a', fontsize=8)
+axes[2].set_ylim(0, 1)
+
+# D) Top misclassifications
+errors = {}
+for t, p_i in zip(all_true, all_preds):
+    if t != p_i:
+        key = f'{idx_to_class[t][:12]}->{idx_to_class[p_i][:12]}'
+        errors[key] = errors.get(key, 0) + 1
+top_errors = sorted(errors.items(), key=lambda x: -x[1])[:10]
+if top_errors:
+    err_labels, err_vals = zip(*top_errors)
+    axes[3].barh(range(len(err_labels)), err_vals, color='#f87171', edgecolor='none')
+    axes[3].set_yticks(range(len(err_labels)))
+    axes[3].set_yticklabels(err_labels, fontsize=6)
+    axes[3].set_title('Top Misclassifications', color='white', fontsize=10)
+    axes[3].set_xlabel('Count', color='#5a7a5a', fontsize=8)
+
+# E) Confidence histogram
+axes[4].hist(np.max(all_probs, axis=1), bins=30, color='#818cf8', edgecolor='none', alpha=0.9)
+axes[4].set_title('Confidence Distribution', color='white', fontsize=10)
+axes[4].set_xlabel('Max Softmax Probability', color='#5a7a5a', fontsize=8)
+axes[4].set_ylabel('Count', color='#5a7a5a', fontsize=8)
+axes[4].axvline(0.7, color='#fbbf24', ls='--', alpha=0.6)
+
+# F) Summary stats
+summary_txt = (
+    f"Overall Accuracy : {overall_acc*100:.1f}%\n"
+    f"Top-3 Accuracy   : {test_top3*100:.1f}%\n"
+    f"Total Images     : {len(all_preds):,}\n"
+    f"Classes          : {num_classes}\n"
+    f"Model            : MobileNetV2\n"
+    f"Input Size       : {CONFIG['img_size'][0]}x{CONFIG['img_size'][1]}\n"
+    f"Phase 1 Best Val : {best_p1*100:.1f}%\n"
+    f"Phase 2 Best Val : {best_p2*100:.1f}%\n"
+    f"KB Diseases      : {len(KNOWLEDGE_BASE)}\n"
+)
+axes[5].axis('off')
+axes[5].text(0.05, 0.95, summary_txt, transform=axes[5].transAxes,
+             color='white', fontsize=9, va='top', fontfamily='monospace',
+             bbox=dict(boxstyle='round,pad=0.6', facecolor='#1a2e1a', edgecolor='#3a5a3a'))
+axes[5].set_title('Model Summary', color='white', fontsize=10)
+
+plt.savefig(f"{CONFIG['results_dir']}/dashboard.png",
+            dpi=150, bbox_inches='tight', facecolor='#0a0f0a')
+plt.show()
+print('CELL 9 done — dashboard saved')
