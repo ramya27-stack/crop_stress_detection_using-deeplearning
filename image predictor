@@ -1,0 +1,179 @@
+
+# ════════════════════════════════════════════════════════════
+# CELL 10 — IMAGE PREDICTOR
+# Title   : Live Leaf Image Prediction & Recommendation
+# Process : Upload or provide path to any leaf image.
+#           Model predicts stress type + confidence.
+#           Recommendation engine provides full field advice.
+#           Shows 3-panel visual: image, bar chart, advice.
+# ════════════════════════════════════════════════════════════
+
+def predict_from_array(img_array):
+    """Run model inference on a numpy image array."""
+    img = Image.fromarray(img_array).resize(CONFIG['img_size'])
+    arr = np.expand_dims(np.array(img) / 255.0, axis=0)
+    return model.predict(arr, verbose=0)[0]
+
+
+def show_prediction_panel(img_array, probs):
+    """3-panel visual: uploaded image | top predictions | recommendation."""
+    top_k     = min(5, len(probs))
+    top_idx   = np.argsort(probs)[::-1][:top_k]
+    top_class = idx_to_class[top_idx[0]]
+    rec       = get_recommendation(top_class)
+
+    sev_color = {
+        'None': '#4ade80', 'Medium': '#fbbf24',
+        'Medium-High': '#fb923c', 'High': '#fb923c', 'Very High': '#f87171',
+    }.get(rec['severity'], '#94a3b8')
+
+    fig = plt.figure(figsize=(18, 7), facecolor='#0a0f0a')
+    fig.suptitle('Multicrop Stress Detector', color='white', fontsize=15, fontweight='bold')
+    gs     = fig.add_gridspec(1, 3, wspace=0.35)
+    ax_img = fig.add_subplot(gs[0, 0])
+    ax_bar = fig.add_subplot(gs[0, 1])
+    ax_rec = fig.add_subplot(gs[0, 2])
+
+    for ax in [ax_img, ax_bar, ax_rec]:
+        ax.set_facecolor('#111811')
+        for spine in ax.spines.values(): spine.set_edgecolor('#1e2e1e')
+
+    # Panel 1: image
+    ax_img.imshow(img_array)
+    ax_img.set_title('Uploaded Image', color='white', fontsize=11)
+    ax_img.axis('off')
+    ax_img.text(0.5, -0.04,
+                f'Predicted: {top_class.replace("_"," ").title()}',
+                transform=ax_img.transAxes, ha='center',
+                color=sev_color, fontsize=9, fontweight='bold')
+
+    # Panel 2: confidence bars
+    bar_labels = [idx_to_class[i].replace('_', ' ')[:22] for i in top_idx]
+    bar_vals   = [float(probs[i]) for i in top_idx]
+    bar_colors = [sev_color if i == 0 else '#4a6a4a' for i in range(len(top_idx))]  # FIX
+
+    bars = ax_bar.barh(range(top_k)[::-1], bar_vals, color=bar_colors, edgecolor='none')
+    ax_bar.set_yticks(range(top_k)[::-1])
+    ax_bar.set_yticklabels(bar_labels, color='white', fontsize=8)
+    ax_bar.set_xlim(0, 1)
+    ax_bar.set_xlabel('Confidence', color='#5a7a5a', fontsize=9)
+    ax_bar.set_title('Top Predictions', color='white', fontsize=11)
+    ax_bar.tick_params(colors='white')
+    for bar, val in zip(bars, bar_vals[::-1]):
+        ax_bar.text(val + 0.01, bar.get_y() + bar.get_height() / 2,
+                    f'{val*100:.1f}%', va='center', color='white', fontsize=8)
+
+    # Panel 3: recommendation
+    org  = rec['treatment'].get('organic',  [])
+    chem = rec['treatment'].get('chemical', [])
+    prev = rec.get('prevention', [])
+    rec_lines = [
+        f"DIAGNOSIS: {rec.get('full_name', top_class)}",
+        f"TYPE:      {rec.get('type', 'Unknown')}",
+        f"SEVERITY:  {rec.get('severity', 'Unknown')}",
+        '',
+        'CAUSE:',
+        f"  {str(rec.get('cause','N/A'))[:58]}",
+        '',
+        'ORGANIC TREATMENT:',
+    ] + [f"  * {t[:54]}" for t in org[:3]] + [
+        '',
+        'CHEMICAL TREATMENT:',
+    ] + [f"  * {t[:54]}" for t in chem[:2]] + [
+        '',
+        'PREVENTION:',
+    ] + [f"  * {p[:54]}" for p in prev[:3]] + [
+        '',
+        f"IRRIGATION: {str(rec.get('irrigation','N/A'))[:48]}",
+        f"FERTILIZER: {str(rec.get('fertilizer','N/A'))[:48]}",
+    ]
+
+    ax_rec.axis('off')
+    ax_rec.text(0.03, 0.97, '\n'.join(rec_lines),
+                transform=ax_rec.transAxes,
+                color='white', fontsize=7.5, va='top', fontfamily='monospace',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='#1a2e1a',
+                          edgecolor=sev_color, linewidth=1.5))
+    ax_rec.set_title('Agronomic Recommendation', color='white', fontsize=11)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def predict_from_path(image_path: str):
+    """
+    Predict from a file path and show the full panel.
+    Usage: predict_from_path('D:/crop_stress/testing/leaf_blight/img001.jpg')
+    """
+    img       = Image.open(image_path).convert('RGB')
+    img_array = np.array(img)
+    probs     = predict_from_array(img_array)
+    show_prediction_panel(img_array, probs)
+    pred_class = idx_to_class[np.argmax(probs)]
+    confidence = float(np.max(probs))
+    print(format_recommendation(pred_class, confidence))
+    return {'predicted_class': pred_class, 'confidence': confidence}
+
+
+def _read_upload(upload_btn):
+    """Read file bytes from widget — works with ipywidgets v7 and v8+."""
+    val = upload_btn.value
+    if isinstance(val, dict):
+        file_info = list(val.values())[0]
+        fname     = file_info.get('metadata', {}).get('name', 'image')
+        content   = file_info['content']
+        img_bytes = bytes(content)
+    else:
+        file_info = val[0]
+        fname     = file_info.get('name', 'image')
+        content   = file_info['content']
+        img_bytes = content.tobytes() if hasattr(content, 'tobytes') else bytes(content)
+    return img_bytes, fname
+
+
+def launch_image_uploader():
+    """Interactive upload widget for Jupyter/Colab."""
+    upload_btn = widgets.FileUpload(
+        accept='.jpg,.jpeg,.png,.bmp,.webp',
+        multiple=False,
+        description='Upload Leaf Image',
+        button_style='success',
+        layout=widgets.Layout(width='200px', height='40px')
+    )
+    status_lbl = widgets.Label(value='<-- Click to upload a crop/leaf image')
+    out        = widgets.Output()
+
+    def on_upload(change):
+        if not upload_btn.value:
+            return
+        with out:
+            clear_output(wait=True)
+            img_bytes, fname = _read_upload(upload_btn)
+            img       = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+            img_array = np.array(img)
+            status_lbl.value = f'Analysing: {fname} ...'
+            probs      = predict_from_array(img_array)
+            pred_class = idx_to_class[np.argmax(probs)]
+            confidence = float(np.max(probs))
+            status_lbl.value = (f'Done -- {pred_class.replace("_"," ").title()} '
+                                f'({confidence*100:.1f}% confidence)')
+            show_prediction_panel(img_array, probs)
+            print(format_recommendation(pred_class, confidence))
+
+    upload_btn.observe(on_upload, names='value')
+    display(widgets.VBox([widgets.HBox([upload_btn, status_lbl]), out]))
+
+
+# ── Launch predictor ─────────────────────────────────────────
+print('CELL 10 — Image predictor ready')
+print()
+print('  Option A — file path (any environment):')
+print('    predict_from_path("D:/your/leaf_image.jpg")')
+print()
+print('  Option B — interactive upload (Jupyter/Colab):')
+print('    launch_image_uploader()')
+print()
+launch_image_uploader()
+
+# ── Uncomment to use Option A ─────────────────────────────────
+# predict_from_path('D:/crop_stress/testing/leaf_blight/img001.jpg')
