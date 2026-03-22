@@ -1,0 +1,41 @@
+# ════════════════════════════════════════════════════════════
+# CELL 2 — CONFIGURATION
+# Title   : Project Configuration & Dataset Paths
+# Process : Define all hyperparameters and folder paths.
+#           Only edit the BASE variable to match your system.
+# ════════════════════════════════════════════════════════════
+
+# ╔══════════════════════════════════════════╗
+# ║  ONLY CHANGE THIS — your dataset folder  ║
+# ╚══════════════════════════════════════════╝
+BASE      = 'D:/crop_stress'
+TRAIN_DIR = 'D:/crop_stress/training'
+TEST_DIR  = 'D:/crop_stress/testing'
+
+CONFIG = {
+    'img_size'        : (96, 96),   # small = fast on CPU; use (224,224) on GPU
+    'batch_size'      : 64,
+    'epochs_p1'       : 15,         # Phase 1: head-only training
+    'epochs_p2'       : 8,          # Phase 2: fine-tuning
+    'learning_rate'   : 1e-3,
+    'dropout_rate'    : 0.3,
+    'fast_mode'       : True,       # True=25% data/epoch (CPU); False=full (GPU)
+    'model_save_path' : './saved_model/model.h5',
+    'results_dir'     : './results',
+    'seed'            : 42,
+}
+
+os.makedirs('./saved_model', exist_ok=True)
+os.makedirs('./results',     exist_ok=True)
+
+# Verify folders exist
+assert os.path.isdir(TRAIN_DIR), f'ERROR: Training folder not found: {TRAIN_DIR}'
+assert os.path.isdir(TEST_DIR),  f'ERROR: Testing folder not found: {TEST_DIR}'
+
+classes = sorted(d for d in os.listdir(TRAIN_DIR)
+                 if os.path.isdir(os.path.join(TRAIN_DIR, d)))
+
+print('CELL 2 done — config OK')
+print(f'  TRAIN_DIR  : {TRAIN_DIR}')
+print(f'  TEST_DIR   : {TEST_DIR}')
+print(f'  Classes    : {len(classes)}  → {classes}')
