@@ -1,0 +1,55 @@
+# ════════════════════════════════════════════════════════════
+# CELL 4 — MODEL ARCHITECTURE
+# Title   : Deep Learning Model Build
+# Process : Build a Transfer Learning model using MobileNetV2
+#           as the feature extractor (pretrained on ImageNet).
+#           Add a custom classification head on top.
+#
+#  Algorithm: Transfer Learning + Convolutional Neural Network
+#  ┌──────────────────────────────────────────┐
+#  │ Input (96×96×3 RGB image)                │
+#  │ → MobileNetV2 Backbone (frozen)          │  ← learns edges, textures, shapes
+#  │ → GlobalAveragePooling2D                 │  ← converts feature maps to vector
+#  │ → BatchNormalization                     │  ← stabilises training
+#  │ → Dense(256, ReLU) + Dropout(0.3)        │  ← learns crop-specific patterns
+#  │ → Dense(128, ReLU) + Dropout(0.15)       │
+#  │ → Dense(num_classes, Softmax)            │  ← outputs probability per class
+#  └──────────────────────────────────────────┘
+# ════════════════════════════════════════════════════════════
+
+def build_model(num_classes):
+    base = MobileNetV2(
+        weights     = 'imagenet',
+        include_top = False,
+        input_shape = (*CONFIG['img_size'], 3),
+    )
+    base.trainable = False   # frozen for Phase 1
+
+    inputs  = keras.Input(shape=(*CONFIG['img_size'], 3))
+    x       = base(inputs, training=False)
+    x       = layers.GlobalAveragePooling2D()(x)
+    x       = layers.BatchNormalization()(x)
+    x       = layers.Dense(256, activation='relu')(x)
+    x       = layers.Dropout(CONFIG['dropout_rate'])(x)
+    x       = layers.Dense(128, activation='relu')(x)
+    x       = layers.Dropout(CONFIG['dropout_rate'] * 0.5)(x)
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+
+    model = keras.Model(inputs, outputs, name='CropStressDetector')
+    return model, base
+
+
+model, base_model = build_model(num_classes)
+
+model.compile(
+    optimizer = keras.optimizers.Adam(CONFIG['learning_rate']),
+    loss      = 'categorical_crossentropy',
+    metrics   = ['accuracy',
+                 keras.metrics.TopKCategoricalAccuracy(k=3, name='top3_accuracy')],
+)
+
+model.summary()
+print(f'\nCELL 4 done — model built')
+print(f'  Total params     : {model.count_params():,}')
+print(f'  Trainable params : {sum(tf.size(v).numpy() for v in model.trainable_variables):,}')
+
