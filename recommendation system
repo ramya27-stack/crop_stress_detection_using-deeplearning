@@ -1,0 +1,264 @@
+
+# ════════════════════════════════════════════════════════════
+# CELL 6 — LOAD SAVED MODEL  (skip training next time)
+# Title   : Model Loader
+# Process : If you already trained, just run this cell instead
+#           of CELL 5. Loads model.h5 from disk in ~5 seconds.
+#           Run CELL 1, CELL 2, CELL 3, then this cell.
+# ════════════════════════════════════════════════════════════
+
+# Uncomment these lines when loading a previously saved model:
+
+# model = keras.models.load_model(CONFIG['model_save_path'])
+# print(f'Model loaded from {CONFIG["model_save_path"]}')
+# best_p1, best_p2 = 0.0, 0.0   # placeholders since we skipped training
+# h1 = h2 = None                 # no training history when loading
+
+print('CELL 6 — Model loader ready (uncomment to use)')
+
+
+# ════════════════════════════════════════════════════════════
+# CELL 7 — RECOMMENDATION SYSTEM
+# Title   : Traditional Rule-Based Recommendation Engine
+# Process : After the deep learning model identifies the stress,
+#           this system looks up the predicted class name in a
+#           hand-crafted knowledge base (KB) and returns:
+#           cause, symptoms, organic treatment, chemical
+#           treatment, prevention, irrigation advice,
+#           and fertiliser advice.
+#
+#  Algorithm: Rule-Based Expert System (traditional AI)
+#             No ML — just a structured dictionary lookup
+#             with substring matching for flexibility.
+# ════════════════════════════════════════════════════════════
+
+KNOWLEDGE_BASE = {
+    'leaf_blight': {
+        'full_name' : 'Leaf Blight',
+        'type'      : 'Fungal / Bacterial',
+        'severity'  : 'High',
+        'cause'     : 'Alternaria spp. / Xanthomonas spp. under high humidity',
+        'symptoms'  : 'Brown water-soaked lesions expanding to cover entire leaf',
+        'treatment' : {
+            'organic'  : ['Neem oil spray (5 ml/L)', 'Copper-based Bordeaux mixture', 'Remove infected leaves'],
+            'chemical' : ['Mancozeb 75WP @ 2.5 g/L', 'Propiconazole 25EC @ 1 ml/L'],
+        },
+        'prevention': ['Avoid overhead irrigation', 'Crop rotation every 2 years', 'Use certified disease-free seeds'],
+        'irrigation': 'Reduce; switch to drip/furrow irrigation',
+        'fertilizer': 'Reduce nitrogen; increase potassium (K2O) to strengthen cell walls',
+    },
+    'leaf_spot': {
+        'full_name' : 'Leaf Spot',
+        'type'      : 'Fungal',
+        'severity'  : 'Medium',
+        'cause'     : 'Cercospora spp. / Septoria spp.',
+        'symptoms'  : 'Circular brown/tan spots with yellow halo on leaves',
+        'treatment' : {
+            'organic'  : ['Baking soda solution (1 tsp/L)', 'Neem oil 3 ml/L', 'Remove infected leaves immediately'],
+            'chemical' : ['Chlorothalonil 75WP @ 2 g/L', 'Carbendazim 50WP @ 1 g/L'],
+        },
+        'prevention': ['Avoid wetting foliage', 'Adequate plant spacing (>30 cm)', 'Apply mulch around base'],
+        'irrigation': 'Morning irrigation only; allow leaves to dry by evening',
+        'fertilizer': 'Balanced NPK; avoid excess nitrogen',
+    },
+    'rust': {
+        'full_name' : 'Rust Disease',
+        'type'      : 'Fungal',
+        'severity'  : 'High',
+        'cause'     : 'Puccinia spp. - spores spread by wind',
+        'symptoms'  : 'Orange/brown pustules on undersides of leaves',
+        'treatment' : {
+            'organic'  : ['Sulfur dust (2 g/L)', 'Remove and burn infected plant parts', 'Milk spray (40% diluted) weekly'],
+            'chemical' : ['Trifloxystrobin + Tebuconazole @ 0.75 ml/L', 'Propiconazole 25EC @ 1 ml/L'],
+        },
+        'prevention': ['Grow rust-resistant varieties', 'Avoid dense planting', 'Monitor from early vegetative stage'],
+        'irrigation': 'Normal; avoid wetting leaves',
+        'fertilizer': 'Increase phosphorus; balanced K',
+    },
+    'powdery_mildew': {
+        'full_name' : 'Powdery Mildew',
+        'type'      : 'Fungal',
+        'severity'  : 'Medium',
+        'cause'     : 'Erysiphe spp. - thrives in warm, dry conditions',
+        'symptoms'  : 'White powdery coating on upper leaf surface',
+        'treatment' : {
+            'organic'  : ['Potassium bicarbonate spray', 'Diluted milk spray (1:9)', 'Neem oil 5 ml/L'],
+            'chemical' : ['Tebuconazole 25.9EC @ 1 ml/L', 'Hexaconazole 5SC @ 1 ml/L'],
+        },
+        'prevention': ['Good air circulation', 'Avoid excess nitrogen fertiliser', 'Resistant cultivars'],
+        'irrigation': 'Reduce humidity; drip irrigation preferred',
+        'fertilizer': 'Reduce N, increase K and Ca',
+    },
+    'bacterial_blight': {
+        'full_name' : 'Bacterial Blight',
+        'type'      : 'Bacterial',
+        'severity'  : 'Very High',
+        'cause'     : 'Xanthomonas oryzae / X. campestris',
+        'symptoms'  : 'Water-soaked margins turning yellow-brown; wilting',
+        'treatment' : {
+            'organic'  : ['Copper hydroxide spray', 'Remove infected material immediately', 'Trichoderma viride bio-control'],
+            'chemical' : ['Streptomycin sulfate @ 200 ppm', 'Copper oxychloride 50WP @ 3 g/L'],
+        },
+        'prevention': ['Use clean seeds/transplants', 'Avoid mechanical injury', 'Field sanitation after harvest'],
+        'irrigation': 'Avoid waterlogging; improve drainage',
+        'fertilizer': 'Reduce nitrogen; apply silicon-based amendments',
+    },
+    'early_blight': {
+        'full_name' : 'Early Blight',
+        'type'      : 'Fungal',
+        'severity'  : 'Medium-High',
+        'cause'     : 'Alternaria solani - favoured by warm humid weather',
+        'symptoms'  : 'Dark concentric-ring lesions (target pattern) on older leaves',
+        'treatment' : {
+            'organic'  : ['Compost tea spray', 'Neem oil + soap solution', 'Remove lowest infected leaves'],
+            'chemical' : ['Chlorothalonil 75WP @ 2 g/L', 'Mancozeb + Metalaxyl @ 2.5 g/L'],
+        },
+        'prevention': ['Crop rotation (3-year)', 'Mulching to prevent soil splash', 'Deep ploughing of crop residues'],
+        'irrigation': 'Avoid wetting foliage; use drip',
+        'fertilizer': 'Balanced; avoid over-fertilisation',
+    },
+    'late_blight': {
+        'full_name' : 'Late Blight',
+        'type'      : 'Oomycete (Water Mould)',
+        'severity'  : 'Very High',
+        'cause'     : 'Phytophthora infestans - spreads rapidly in cool wet weather',
+        'symptoms'  : 'Dark greasy patches on leaves/stems; white mould beneath',
+        'treatment' : {
+            'organic'  : ['Copper-based Bordeaux mixture 1%', 'Remove and destroy infected tissue urgently'],
+            'chemical' : ['Metalaxyl-M 4% + Mancozeb 64WP @ 2.5 g/L', 'Cymoxanil + Mancozeb @ 3 g/L'],
+        },
+        'prevention': ['Use resistant varieties', 'Monitor forecasts', 'Destroy volunteer plants'],
+        'irrigation': 'Reduce; avoid wet foliage at all costs',
+        'fertilizer': 'Normal; avoid excess N',
+    },
+    'mosaic_virus': {
+        'full_name' : 'Mosaic Virus',
+        'type'      : 'Viral',
+        'severity'  : 'High',
+        'cause'     : 'TMV / CMV / ZYMV - transmitted by aphids',
+        'symptoms'  : 'Mottled yellow-green mosaic pattern, leaf distortion, stunting',
+        'treatment' : {
+            'organic'  : ['No cure - remove and destroy infected plants', 'Control aphid vectors with neem oil', 'Yellow sticky traps for aphids'],
+            'chemical' : ['Imidacloprid 17.8SL @ 0.3 ml/L (for aphid control)', 'No antiviral chemicals available'],
+        },
+        'prevention': ['Use virus-free certified seeds', 'Control insect vectors', 'Avoid touching plants after smoking'],
+        'irrigation': 'Maintain optimal; stress worsens symptoms',
+        'fertilizer': 'Boost phosphorus and zinc to improve plant immunity',
+    },
+    'nutrient_deficiency': {
+        'full_name' : 'Nutrient Deficiency',
+        'type'      : 'Abiotic Stress',
+        'severity'  : 'Medium',
+        'cause'     : 'Deficient N, P, K, Fe, Mg or Zn in soil',
+        'symptoms'  : 'Yellowing (chlorosis), purple tints, stunting',
+        'treatment' : {
+            'organic'  : ['Compost/manure application', 'Foliar spray of diluted seaweed extract', 'Green manure incorporation'],
+            'chemical' : ['Soil test first; apply missing nutrient', 'Chelated micronutrients for Fe/Zn/Mn deficiency'],
+        },
+        'prevention': ['Annual soil testing', 'Balanced NPK programme', 'Maintain soil pH 6.0-7.0'],
+        'irrigation': 'Normal',
+        'fertilizer': 'Targeted supplementation based on soil test',
+    },
+    'drought_stress': {
+        'full_name' : 'Drought Stress',
+        'type'      : 'Abiotic Stress',
+        'severity'  : 'High',
+        'cause'     : 'Insufficient soil moisture - stomatal closure, reduced photosynthesis',
+        'symptoms'  : 'Wilting, leaf rolling/curling, tip burn, premature senescence',
+        'treatment' : {
+            'organic'  : ['Mulching (5 cm straw/organic matter)', 'Kaolin clay spray to reflect heat', 'Compost to improve water retention'],
+            'chemical' : ['Anti-transpirant spray (pinolene)', 'Silicon-based growth promoters'],
+        },
+        'prevention': ['Drought-tolerant varieties', 'Rainwater harvesting', 'Deficit irrigation scheduling'],
+        'irrigation': 'Increase immediately; switch to daily drip for 7-10 days',
+        'fertilizer': 'Reduce N; apply potassium to improve drought tolerance',
+    },
+    'biotic_stress': {
+        'full_name' : 'Biotic Stress (General)',
+        'type'      : 'Biotic - Fungal / Bacterial / Viral / Pest',
+        'severity'  : 'High',
+        'cause'     : 'Living organism - fungus, bacteria, virus, nematode or insect pest',
+        'symptoms'  : 'Visible lesions, discolouration, wilting or abnormal growth',
+        'treatment' : {
+            'organic'  : ['Neem oil spray 5 ml/L', 'Remove and destroy infected plant parts', 'Apply Trichoderma viride bio-control'],
+            'chemical' : ['Mancozeb 75WP @ 2.5 g/L as broad-spectrum protection', 'Scout and identify specific pathogen before targeted treatment'],
+        },
+        'prevention': ['Regular field scouting twice per week', 'Maintain crop hygiene and remove debris', 'Use certified disease-free seeds'],
+        'irrigation': 'Avoid overhead irrigation; switch to drip to reduce humidity',
+        'fertilizer': 'Boost potassium (K) to strengthen plant immunity; avoid excess nitrogen',
+    },
+    'healthy': {
+        'full_name' : 'Healthy Plant',
+        'type'      : 'No Stress',
+        'severity'  : 'None',
+        'cause'     : 'N/A',
+        'symptoms'  : 'Normal green foliage, no visible stress',
+        'treatment' : {
+            'organic'  : ['Maintain current management', 'Continue monitoring weekly'],
+            'chemical' : ['No treatment required'],
+        },
+        'prevention': ['Continue preventive scouting', 'Maintain optimal nutrition', 'Regular irrigation schedule'],
+        'irrigation': 'Maintain current schedule',
+        'fertilizer': 'Continue balanced fertilisation programme',
+    },
+}
+
+GENERIC_ADVICE = {
+    'full_name' : 'Unknown Stress / Disease',
+    'type'      : 'Unidentified',
+    'severity'  : 'Unknown - consult agronomist',
+    'cause'     : 'Pathogen or abiotic factor - further diagnosis needed',
+    'symptoms'  : 'Visible abnormality detected by model',
+    'treatment' : {
+        'organic'  : ['Remove affected plant material', 'Neem oil broad-spectrum spray (5 ml/L)', 'Consult local agricultural extension officer'],
+        'chemical' : ['Broad-spectrum fungicide (Mancozeb 75WP @ 2.5 g/L) as precaution', 'Seek professional diagnosis before chemical use'],
+    },
+    'prevention': ['Regular crop scouting (twice/week)', 'Maintain crop hygiene', 'Document symptoms and consult expert'],
+    'irrigation': 'Maintain normal schedule unless waterlogging observed',
+    'fertilizer': 'Maintain balanced nutrition; avoid stress-inducing extremes',
+}
+
+
+def get_recommendation(class_name: str) -> dict:
+    lower = class_name.lower().replace(' ', '_')
+    for key, rec in KNOWLEDGE_BASE.items():
+        if key in lower or lower in key:
+            return rec
+    return {**GENERIC_ADVICE, 'full_name': class_name.replace('_', ' ').title()}
+
+
+def format_recommendation(class_name: str, confidence: float) -> str:
+    rec = get_recommendation(class_name)
+    sev_emoji = {'None': 'OK', 'Medium': 'WARN', 'High': 'HIGH',
+                 'Very High': 'URGENT', 'Medium-High': 'MEDIUM-HIGH'}.get(rec['severity'], '?')
+    lines = [
+        '=' * 60,
+        f"  DIAGNOSIS  : {rec['full_name']}",
+        f"  CONFIDENCE : {confidence*100:.1f}%",
+        f"  TYPE       : {rec['type']}",
+        f"  SEVERITY   : [{sev_emoji}] {rec['severity']}",
+        '=' * 60,
+        f"  CAUSE      : {rec['cause']}",
+        f"  SYMPTOMS   : {rec['symptoms']}",
+        '',
+        '  TREATMENT (Organic):',
+    ]
+    for t in rec['treatment']['organic']:
+        lines.append(f'    * {t}')
+    lines += ['', '  TREATMENT (Chemical):']
+    for t in rec['treatment']['chemical']:
+        lines.append(f'    * {t}')
+    lines += ['', '  PREVENTION:']
+    for p in rec['prevention']:
+        lines.append(f'    * {p}')
+    lines += [
+        '',
+        f"  IRRIGATION : {rec['irrigation']}",
+        f"  FERTILIZER : {rec['fertilizer']}",
+        '=' * 60,
+    ]
+    return '\n'.join(lines)
+
+
+print('CELL 7 done — recommendation system ready')
+print(f'  Knowledge base covers {len(KNOWLEDGE_BASE)} stress/disease types')
