@@ -1,0 +1,118 @@
+
+# ════════════════════════════════════════════════════════════
+# CELL 5 — TRAINING
+# Title   : Two-Phase Transfer Learning Training
+# Process :
+#   PHASE 1 — Train only the classification head (backbone frozen)
+#             Fast convergence since only ~130K params updated.
+#             Optimizer: Adam  LR: 1e-3
+#
+#   PHASE 2 — Unfreeze top 20 MobileNetV2 layers for fine-tuning
+#             Model learns crop-specific visual features.
+#             Optimizer: Adam  LR: 1e-4 (10x lower to avoid forgetting)
+#
+#  Callbacks used:
+#   EarlyStopping    — stops if val_accuracy stops improving
+#   ModelCheckpoint  — saves best model to disk automatically
+#   ReduceLROnPlateau — halves LR when val_loss plateaus
+# ════════════════════════════════════════════════════════════
+
+callbacks = [
+    EarlyStopping(
+        monitor='val_accuracy', patience=4,
+        restore_best_weights=True, verbose=1,
+    ),
+    ModelCheckpoint(
+        CONFIG['model_save_path'],
+        monitor='val_accuracy', save_best_only=True, verbose=1,
+    ),
+    ReduceLROnPlateau(
+        monitor='val_loss', factor=0.4,
+        patience=2, min_lr=1e-7, verbose=1,
+    ),
+]
+
+# ── PHASE 1: Head only ──────────────────────────────────────
+print('=' * 50)
+print('  PHASE 1 — Training head only (backbone frozen)')
+print(f'  Classes: {num_classes}  |  LR: {CONFIG["learning_rate"]}')
+print('=' * 50)
+
+h1 = model.fit(
+    train_gen,
+    validation_data  = val_gen,
+    epochs           = CONFIG['epochs_p1'],
+    steps_per_epoch  = TRAIN_STEPS,
+    validation_steps = VAL_STEPS,
+    callbacks        = callbacks,
+    verbose          = 1,
+)
+best_p1 = max(h1.history['val_accuracy'])
+print(f'\n  Phase 1 best val accuracy: {best_p1*100:.2f}%')
+
+# ── PHASE 2: Fine-tune top 20 backbone layers ───────────────
+base_model.trainable = True
+for layer in base_model.layers[:-20]:
+    layer.trainable = False
+
+model.compile(
+    optimizer = keras.optimizers.Adam(CONFIG['learning_rate'] / 10),
+    loss      = 'categorical_crossentropy',
+    metrics   = ['accuracy',
+                 keras.metrics.TopKCategoricalAccuracy(k=3, name='top3_accuracy')],
+)
+
+print('\n' + '=' * 50)
+print('  PHASE 2 — Fine-tuning top 20 backbone layers')
+print(f'  LR: {CONFIG["learning_rate"]/10}  (10x lower)')
+print('=' * 50)
+
+h2 = model.fit(
+    train_gen,
+    validation_data  = val_gen,
+    epochs           = CONFIG['epochs_p2'],
+    steps_per_epoch  = TRAIN_STEPS,
+    validation_steps = VAL_STEPS,
+    callbacks        = callbacks,
+    verbose          = 1,
+)
+best_p2 = max(h2.history['val_accuracy'])
+print(f'\n  Phase 2 best val accuracy: {best_p2*100:.2f}%')
+print(f'\nCELL 5 done — training complete')
+print(f'  Model saved to: {CONFIG["model_save_path"]}')
+
+# ── Training curves plot ─────────────────────────────────────
+acc      = h1.history['accuracy']    + h2.history['accuracy']
+val_acc  = h1.history['val_accuracy']+ h2.history['val_accuracy']
+loss     = h1.history['loss']        + h2.history['loss']
+val_loss = h1.history['val_loss']    + h2.history['val_loss']
+split    = len(h1.history['accuracy'])
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5), facecolor='#0a0f0a')
+for ax in axes:
+    ax.set_facecolor('#111811')
+    ax.tick_params(colors='#5a7a5a')
+    for spine in ax.spines.values(): spine.set_edgecolor('#1e2e1e')
+    ax.axvline(x=split, color='#fbbf24', linestyle='--', alpha=0.6, label='Fine-tune start')
+
+axes[0].plot(acc,     color='#4ade80', lw=2, label='Train Accuracy')
+axes[0].plot(val_acc, color='#60a5fa', lw=2, label='Val Accuracy', ls='--')
+axes[0].set_title('Model Accuracy', color='white', fontsize=13, fontweight='bold')
+axes[0].set_xlabel('Epoch', color='#5a7a5a')
+axes[0].set_ylabel('Accuracy', color='#5a7a5a')
+axes[0].set_ylim([0, 1])
+axes[0].legend(facecolor='#111811', labelcolor='white')
+
+axes[1].plot(loss,     color='#f87171', lw=2, label='Train Loss')
+axes[1].plot(val_loss, color='#fbbf24', lw=2, label='Val Loss', ls='--')
+axes[1].set_title('Model Loss', color='white', fontsize=13, fontweight='bold')
+axes[1].set_xlabel('Epoch', color='#5a7a5a')
+axes[1].set_ylabel('Loss', color='#5a7a5a')
+axes[1].legend(facecolor='#111811', labelcolor='white')
+
+plt.suptitle('Multicrop Stress Detection — Training History', color='white', fontsize=14)
+plt.tight_layout()
+plt.savefig(f"{CONFIG['results_dir']}/training_history.png",
+            dpi=150, bbox_inches='tight', facecolor='#0a0f0a')
+plt.show()
+
