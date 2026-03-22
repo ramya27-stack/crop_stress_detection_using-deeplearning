@@ -1,0 +1,59 @@
+# ============================================================
+#  MULTICROP STRESS DETECTION SYSTEM
+#  Algorithm : Transfer Learning (MobileNetV2) +
+#              Rule-Based Recommendation Engine
+#  Author    : Your Name
+#  Run once  : python crop_stress_complete.py
+#              OR paste cell-by-cell into Jupyter
+# ============================================================
+#
+#  HOW TO RUN THIS PROJECT
+#  ─────────────────────────────────────────────────────────
+#  FIRST TIME (training):
+#    1. Set BASE path below to your dataset folder
+#    2. Run all cells top to bottom (Kernel → Restart & Run All)
+#    3. Training takes 30-60 min on CPU, ~5 min on GPU
+#    4. Model saves to ./saved_model/model.h5 automatically
+#
+#  EVERY TIME AFTER (prediction only — no retraining):
+#    1. Run CELL 1  (imports)
+#    2. Run CELL 2  (config — set BASE path)
+#    3. Run CELL 6  (load saved model — skips training)
+#    4. Run CELL 7  (recommendation system)
+#    5. Run CELL 10 (image predictor)
+#    → Done! Upload any leaf image and get instant results.
+# ============================================================
+
+
+# ════════════════════════════════════════════════════════════
+# CELL 1 — IMPORTS
+# Title   : Library Setup
+# Process : Load all required Python libraries for deep
+#           learning, image processing, and visualisation.
+# ════════════════════════════════════════════════════════════
+import os, json, math, csv, warnings, io
+warnings.filterwarnings('ignore')
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import seaborn as sns
+from PIL import Image
+
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from sklearn.metrics import classification_report, confusion_matrix
+
+import ipywidgets as widgets
+from IPython.display import display, clear_output
+
+tf.random.set_seed(42)
+np.random.seed(42)
+
+print('CELL 1 done — imports OK')
+print(f'TensorFlow : {tf.__version__}')
+print(f'GPU        : {tf.config.list_physical_devices("GPU")}')
